@@ -192,38 +192,40 @@ function Login({ onLogin }) {
         </div>
       </div>
 
-      {/* Tarjeta de acceso, tipo hoja flotante abajo */}
-      <div
-        style={{
-          position: "relative",
-          background: "#F6EEDD",
-          borderRadius: "18px 18px 0 0",
-          boxShadow: "0 -10px 40px rgba(0,0,0,0.35)",
-          padding: "26px 26px max(26px, env(safe-area-inset-bottom))",
-        }}
-      >
-        <div style={{ width: 40, height: 4, borderRadius: 999, background: "#14110D22", margin: "0 auto 18px" }} />
-        <p style={{ margin: "0 0 4px", fontFamily: "'Oswald', sans-serif", fontSize: 19, color: "#14110D", textTransform: "uppercase", letterSpacing: 0.5 }}>
-          ¡Hola! 👋
-        </p>
-        <p style={{ margin: "0 0 20px", fontSize: 13.5, color: "#12242A88" }}>
-          Ingresa para registrar tus ventas del día
-        </p>
+      {/* Tarjeta de acceso, compacta y flotante abajo */}
+      <div style={{ position: "relative", display: "flex", justifyContent: "center", padding: "0 16px max(16px, env(safe-area-inset-bottom))" }}>
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 300,
+            background: "#F6EEDD",
+            borderRadius: 14,
+            boxShadow: "0 -6px 30px rgba(0,0,0,0.35)",
+            padding: "16px 18px",
+          }}
+        >
+          <p style={{ margin: "0 0 2px", fontFamily: "'Oswald', sans-serif", fontSize: 15.5, color: "#14110D", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            ¡Hola! 👋
+          </p>
+          <p style={{ margin: "0 0 12px", fontSize: 11.5, color: "#12242A88" }}>
+            Ingresa para registrar tus ventas
+          </p>
 
-        <form onSubmit={submit}>
-          <label style={miniLabel}>Usuario</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="tu.usuario" style={inputStyle} />
-          <label style={{ ...miniLabel, marginTop: 14 }}>Contraseña</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inputStyle} />
-          {error && (
-            <div style={{ display: "flex", gap: 6, alignItems: "center", color: "#c0392b", fontSize: 13, marginTop: 10 }}>
-              <AlertCircle size={15} /> {error}
-            </div>
-          )}
-          <button type="submit" disabled={loading} style={{ ...primaryBtn, opacity: loading ? 0.7 : 1 }}>
-            {loading ? "Ingresando..." : "Zarpar / Despegar"}
-          </button>
-        </form>
+          <form onSubmit={submit}>
+            <label style={{ ...miniLabel, fontSize: 10 }}>Usuario</label>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="tu.usuario" style={{ ...inputStyle, padding: "7px 10px", fontSize: 13, marginTop: 3 }} />
+            <label style={{ ...miniLabel, fontSize: 10, marginTop: 8 }}>Contraseña</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={{ ...inputStyle, padding: "7px 10px", fontSize: 13, marginTop: 3 }} />
+            {error && (
+              <div style={{ display: "flex", gap: 5, alignItems: "center", color: "#c0392b", fontSize: 11.5, marginTop: 7 }}>
+                <AlertCircle size={12} /> {error}
+              </div>
+            )}
+            <button type="submit" disabled={loading} style={{ ...primaryBtn, padding: "9px 0", fontSize: 12.5, marginTop: 12, opacity: loading ? 0.7 : 1 }}>
+              {loading ? "Ingresando..." : "Zarpar / Despegar"}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
