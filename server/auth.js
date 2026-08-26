@@ -4,7 +4,13 @@ const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 
 function sign(user) {
   return jwt.sign(
-    { id: user.id, username: user.username, name: user.name, role: user.role },
+    {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      comisionDefault: user.comision_default != null ? Number(user.comision_default) : null,
+    },
     SECRET,
     { expiresIn: "30d" }
   );
