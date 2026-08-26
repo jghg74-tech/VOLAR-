@@ -51,4 +51,5 @@ export const api = {
   usuarios: () => apiFetch("/api/usuarios"),
   addUsuario: (u) => apiFetch("/api/usuarios", { method: "POST", body: JSON.stringify(u) }),
   deleteUsuario: (id) => apiFetch(`/api/usuarios/${id}`, { method: "DELETE" }),
+  fotoUsuario: (id) => apiFetch(`/api/usuarios/${id}/foto`),
 };
