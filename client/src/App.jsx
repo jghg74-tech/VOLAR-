@@ -523,6 +523,144 @@ function ComprobanteModal({ ventaId, onClose }) {
 /* ---------------------------------------------------------------
    ADMIN: resumen en tiempo real
 ------------------------------------------------------------------*/
+/* ---------------------------------------------------------------
+   COMERCIAL: mis ventas (solo lo propio, nunca lo de otros)
+------------------------------------------------------------------*/
+function MisVentas({ user }) {
+  const [ventas, setVentas] = useState([]);
+  const [perfil, setPerfil] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [viendoFoto, setViendoFoto] = useState(false);
+  const pollRef = useRef(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [v, p] = await Promise.all([api.misVentas(), api.miPerfil()]);
+      setVentas(v); setPerfil(p);
+    } catch (e) { /* silencioso */ }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    pollRef.current = setInterval(refresh, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [refresh]);
+
+  const hoy = todayStr();
+  const ventasHoy = ventas.filter((v) => v.fecha === hoy);
+  const comisionHoy = ventasHoy.reduce((s, v) => s + v.comision, 0);
+  const comisionTotal = ventas.reduce((s, v) => s + v.comision, 0);
+
+  const stats = [
+    { label: "Ventas hoy", value: ventasHoy.length, color: "#14110D" },
+    { label: "Comisión hoy", value: fmtCOP(comisionHoy), color: "#E8642B" },
+    { label: "Comisión acumulada", value: fmtCOP(comisionTotal), color: "#F4A93B" },
+  ];
+
+  return (
+    <div style={{ maxWidth: 700, margin: "0 auto", padding: "20px 16px 60px" }}>
+      {perfil && (
+        <div style={{ background: "#fff", border: "1px solid #14110D1a", borderRadius: 4, padding: 16, marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
+          <button
+            onClick={() => perfil.tieneFoto && setViendoFoto(true)}
+            style={{ width: 52, height: 52, borderRadius: "50%", background: "#F6EEDD", border: "2px solid #F4A93B", display: "flex", alignItems: "center", justifyContent: "center", cursor: perfil.tieneFoto ? "pointer" : "default", padding: 0, overflow: "hidden", flexShrink: 0 }}
+          >
+            {perfil.tieneFoto ? <ImageIcon size={20} color="#F4A93B" /> : <Ship size={18} color="#F4A93B88" />}
+          </button>
+          <div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, color: "#14110D" }}>{perfil.name}</div>
+            <div style={{ fontSize: 12, color: "#12242A88" }}>
+              {perfil.telefono} {perfil.email ? `· ${perfil.email}` : ""}
+            </div>
+            {perfil.comisionDefault != null && (
+              <Stamp color="#E8642B">{perfil.comisionDefault}% comisión por defecto</Stamp>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 20 }}>
+        {stats.map((s) => (
+          <div key={s.label} style={{ background: "#fff", border: `1.5px solid ${s.color}33`, borderRadius: 4, padding: "12px 14px" }}>
+            <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.5, color: "#12242A88", fontWeight: 600 }}>{s.label}</div>
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, color: s.color, marginTop: 4 }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <h3 style={{ fontFamily: "'Oswald', sans-serif", color: "#14110D", textTransform: "uppercase", letterSpacing: 0.5, fontSize: 15, marginBottom: 10 }}>Mis ventas</h3>
+      {ventas.length === 0 ? (
+        <EmptyState text="Todavía no has registrado ninguna venta." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {ventas.map((v) => {
+            const meta = TOUR_META[v.tour];
+            const expanded = expandedId === v.id;
+            const tiposResumen = Object.entries(v.pasajeros.reduce((acc, p) => { acc[p.tipoTour] = (acc[p.tipoTour] || 0) + 1; return acc; }, {})).map(([t, n]) => `${n}× ${t}`).join(" · ");
+            return (
+              <div key={v.id} style={{ background: "#fff", border: "1px solid #14110D1a", borderLeft: `4px solid ${meta.color}`, borderRadius: 3, padding: "10px 14px" }}>
+                <div onClick={() => setExpandedId(expanded ? null : v.id)} style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", cursor: "pointer" }}>
+                  <meta.Icon size={16} color={meta.color} />
+                  <div style={{ minWidth: 140 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{tiposResumen}</div>
+                    <div style={{ fontSize: 11.5, color: "#12242A88" }}>{fmtDateLabel(v.fecha)} {v.horario}</div>
+                  </div>
+                  <Stamp color={meta.color}>{v.pasajeros.length} pax</Stamp>
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, marginLeft: "auto" }}>{fmtCOP(v.precio)}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#E8642B" }}>com. {fmtCOP(v.comision)}</div>
+                  {expanded ? <ChevronUp size={16} color="#12242A88" /> : <ChevronDown size={16} color="#12242A88" />}
+                </div>
+                {expanded && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #14110D22" }}>
+                    {v.pasajeros.map((p, i) => (
+                      <div key={i} style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12.5, background: "#F6EEDD55", borderRadius: 3, padding: "6px 10px", marginBottom: 6 }}>
+                        <strong>{p.nombre}</strong>
+                        <span style={{ color: "#12242A88" }}>{p.documento}</span>
+                        <span style={{ color: meta.color, fontWeight: 600 }}>{p.tipoTour}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {viendoFoto && (
+        <FotoPropiaModal onClose={() => setViendoFoto(false)} />
+      )}
+    </div>
+  );
+}
+
+function FotoPropiaModal({ onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try { setData(await api.miFoto()); }
+      catch (e) { setError(true); }
+      setLoading(false);
+    })();
+  }, []);
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#14110Dcc", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 4, padding: 14, maxWidth: 320, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", fontSize: 14, color: "#14110D" }}>Mi foto</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={18} /></button>
+        </div>
+        {loading && <div style={{ padding: 30, textAlign: "center", color: "#12242A88" }}>Cargando...</div>}
+        {!loading && error && <div style={{ padding: 30, textAlign: "center", color: "#c0392b" }}>No hay foto guardada.</div>}
+        {!loading && data && <img src={data.dataUrl} alt="Mi foto" style={{ width: "100%", borderRadius: 3 }} />}
+      </div>
+    </div>
+  );
+}
+
 function Resumen() {
   const [ventas, setVentas] = useState([]);
   const [cupos, setCupos] = useState([]);
@@ -843,6 +981,7 @@ function Comerciales() {
     for (const f of required) {
       if (!String(form[f]).trim()) return setErr("Completa todos los campos.");
     }
+    if (!foto) return setErr("Toma o sube la foto del comercial antes de continuar.");
     setSaving(true);
     try {
       await api.addUsuario({ ...form, comisionDefault: Number(form.comisionDefault), fotoDataUrl: foto });
@@ -885,7 +1024,7 @@ function Comerciales() {
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={miniLabel}>Fotografía</label>
+            <label style={miniLabel}>Fotografía *</label>
             {foto ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
                 <img src={foto} alt="Foto" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: "50%", border: "2px solid #F4A93B" }} />
@@ -965,6 +1104,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     api.tiposTour().then(setTiposTourState).catch(() => {});
+    setTab(user.role === "admin" ? "resumen" : "registrar");
   }, [user]);
 
   const onLogout = () => { setToken(null); setUser(null); };
@@ -984,10 +1124,14 @@ export default function App() {
     { key: "tipos", label: "Tipos de tour" },
     { key: "comerciales", label: "Comerciales" },
   ];
+  const comercialTabs = [
+    { key: "registrar", label: "Registrar venta" },
+    { key: "misventas", label: "Mis ventas" },
+  ];
 
   return (
     <div style={{ minHeight: "100vh", background: "#F6F2E7", fontFamily: "'Inter', sans-serif" }}>
-      <Topbar user={user} onLogout={onLogout} tabs={user.role === "admin" ? adminTabs : null} tab={tab} setTab={setTab} />
+      <Topbar user={user} onLogout={onLogout} tabs={user.role === "admin" ? adminTabs : comercialTabs} tab={tab} setTab={setTab} />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: user.role === "admin" ? "24px 20px 60px" : 0 }}>
         {user.role === "admin" ? (
           <>
@@ -997,7 +1141,9 @@ export default function App() {
             {tab === "comerciales" && <Comerciales />}
           </>
         ) : (
-          <VentaForm user={user} tiposTour={tiposTour} />
+          <>
+            {tab === "misventas" ? <MisVentas user={user} /> : <VentaForm user={user} tiposTour={tiposTour} />}
+          </>
         )}
       </div>
     </div>
