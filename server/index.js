@@ -105,9 +105,10 @@ app.delete("/api/cupos/:id", requireAuth, requireAdmin, async (req, res) => {
 
 /* ---------------- VENTAS ---------------- */
 
-app.get("/api/ventas", requireAuth, requireAdmin, async (req, res) => {
+async function fetchVentas(whereSql, params) {
   const { rows: ventas } = await pool.query(
-    "SELECT v.*, (c.venta_id IS NOT NULL) AS comprobante_guardado FROM ventas v LEFT JOIN comprobantes c ON c.venta_id = v.id ORDER BY v.created_at DESC LIMIT 200"
+    `SELECT v.*, (c.venta_id IS NOT NULL) AS comprobante_guardado FROM ventas v LEFT JOIN comprobantes c ON c.venta_id = v.id ${whereSql} ORDER BY v.created_at DESC LIMIT 200`,
+    params
   );
   const ids = ventas.map((v) => v.id);
   let pasajerosPorVenta = {};
@@ -122,24 +123,59 @@ app.get("/api/ventas", requireAuth, requireAdmin, async (req, res) => {
       });
     });
   }
-  res.json(
-    ventas.map((v) => ({
-      id: v.id,
-      comercial: v.comercial_username,
-      comercialName: v.comercial_name,
-      tour: v.tour,
-      fecha: v.fecha.toISOString().slice(0, 10),
-      horario: v.horario,
-      precio: Number(v.precio),
-      comisionPct: Number(v.comision_pct),
-      comision: Number(v.comision),
-      formaPago: v.forma_pago,
-      tieneComprobante: v.tiene_comprobante,
-      pagoSinComprobante: v.pago_sin_comprobante,
-      timestamp: new Date(v.created_at).getTime(),
-      pasajeros: pasajerosPorVenta[v.id] || [],
-    }))
+  return ventas.map((v) => ({
+    id: v.id,
+    comercial: v.comercial_username,
+    comercialName: v.comercial_name,
+    tour: v.tour,
+    fecha: v.fecha.toISOString().slice(0, 10),
+    horario: v.horario,
+    precio: Number(v.precio),
+    comisionPct: Number(v.comision_pct),
+    comision: Number(v.comision),
+    formaPago: v.forma_pago,
+    tieneComprobante: v.tiene_comprobante,
+    pagoSinComprobante: v.pago_sin_comprobante,
+    timestamp: new Date(v.created_at).getTime(),
+    pasajeros: pasajerosPorVenta[v.id] || [],
+  }));
+}
+
+app.get("/api/ventas", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await fetchVentas("", []));
+});
+
+// Un comercial SOLO puede ver sus propias ventas — nunca las de otros comerciales.
+// Esa información completa (todos los comerciales) queda exclusiva del admin, arriba.
+app.get("/api/mis-ventas", requireAuth, async (req, res) => {
+  res.json(await fetchVentas("WHERE v.comercial_username = $1", [req.user.username]));
+});
+
+app.get("/api/mi-perfil", requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, username, name, nombre, apellido, cedula, telefono, email, direccion,
+            fecha_nacimiento, fecha_ingreso, comision_default,
+            (SELECT 1 FROM fotos_comercial f WHERE f.user_id = users.id) IS NOT NULL AS tiene_foto
+     FROM users WHERE id = $1`,
+    [req.user.id]
   );
+  const u = rows[0];
+  if (!u) return res.status(404).json({ error: "No encontrado." });
+  res.json({
+    id: u.id, username: u.username, name: u.name, nombre: u.nombre, apellido: u.apellido,
+    cedula: u.cedula, telefono: u.telefono, email: u.email, direccion: u.direccion,
+    fechaNacimiento: u.fecha_nacimiento ? u.fecha_nacimiento.toISOString().slice(0, 10) : null,
+    fechaIngreso: u.fecha_ingreso ? u.fecha_ingreso.toISOString().slice(0, 10) : null,
+    comisionDefault: u.comision_default != null ? Number(u.comision_default) : null,
+    tieneFoto: u.tiene_foto,
+  });
+});
+
+// Un comercial solo puede ver SU PROPIA foto (verificamos que el id pedido sea el suyo, salvo que sea admin).
+app.get("/api/mi-foto", requireAuth, async (req, res) => {
+  const { rows } = await pool.query("SELECT data_url FROM fotos_comercial WHERE user_id=$1", [req.user.id]);
+  if (!rows[0]) return res.status(404).json({ error: "No hay foto guardada." });
+  res.json({ dataUrl: rows[0].data_url });
 });
 
 app.post("/api/ventas", requireAuth, async (req, res) => {
@@ -255,6 +291,9 @@ app.post("/api/usuarios", requireAuth, requireAdmin, async (req, res) => {
       !direccion?.trim() || !fechaNacimiento || !fechaIngreso || comisionDefault === undefined || comisionDefault === "" ||
       !username?.trim() || !password?.trim()) {
     return res.status(400).json({ error: "Completa todos los campos." });
+  }
+  if (!fotoDataUrl) {
+    return res.status(400).json({ error: "La foto del comercial es obligatoria." });
   }
 
   const client = await pool.connect();
