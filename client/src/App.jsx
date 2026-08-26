@@ -141,7 +141,7 @@ function Login({ onLogin }) {
     >
       {/* Foto de fondo: el barco Volar */}
       <img
-        src="/barco-volar.jpg"
+        src="/images.jpg"
         alt="Barco Volar"
         style={{
           position: "absolute",
@@ -185,7 +185,7 @@ function Login({ onLogin }) {
           }}
         >
           <img
-            src="/helicoptero-volar.webp"
+            src="/helicoptero.webp"
             alt="Sobrevuelo en helicóptero"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
@@ -898,3 +898,4 @@ export default function App() {
     </div>
   );
 }
+
