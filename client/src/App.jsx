@@ -274,7 +274,7 @@ function VentaForm({ user, tiposTour }) {
   const [cupoId, setCupoId] = useState("");
   const [pasajeros, setPasajeros] = useState([emptyPasajero()]);
   const [precio, setPrecio] = useState("");
-  const [comisionPct, setComisionPct] = useState(10);
+  const [comisionPct, setComisionPct] = useState(user.comisionDefault ?? 10);
   const [formaPago, setFormaPago] = useState("");
   const [comprobante, setComprobante] = useState(null);
   const [sinComprobante, setSinComprobante] = useState(false);
@@ -781,38 +781,129 @@ function TiposTour() {
 /* ---------------------------------------------------------------
    ADMIN: comerciales
 ------------------------------------------------------------------*/
+function FotoComercialModal({ userId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try { setData(await api.fotoUsuario(userId)); }
+      catch (e) { setError(true); }
+      setLoading(false);
+    })();
+  }, [userId]);
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#14110Dcc", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 4, padding: 14, maxWidth: 340, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", fontSize: 14, color: "#14110D" }}>Foto</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={18} /></button>
+        </div>
+        {loading && <div style={{ padding: 30, textAlign: "center", color: "#12242A88" }}>Cargando...</div>}
+        {!loading && error && <div style={{ padding: 30, textAlign: "center", color: "#c0392b" }}>No hay foto guardada.</div>}
+        {!loading && data && <img src={data.dataUrl} alt="Foto del comercial" style={{ width: "100%", borderRadius: 3 }} />}
+      </div>
+    </div>
+  );
+}
+
+function emptyComercialForm() {
+  return { nombre: "", apellido: "", cedula: "", telefono: "", email: "", direccion: "", fechaNacimiento: "", fechaIngreso: todayStr(), comisionDefault: "10", username: "", password: "" };
+}
+
 function Comerciales() {
   const [users, setUsers] = useState([]);
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [form, setForm] = useState(emptyComercialForm());
+  const [foto, setFoto] = useState(null);
+  const [comprimiendo, setComprimiendo] = useState(false);
   const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [viewingFoto, setViewingFoto] = useState(null);
 
   const load = useCallback(async () => { try { setUsers(await api.usuarios()); } catch (e) {} }, []);
   useEffect(() => { load(); }, [load]);
 
+  const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  const onFotoChange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setComprimiendo(true);
+    try { setFoto(await compressImage(file)); }
+    catch (err) { setErr("No se pudo procesar la foto."); }
+    setComprimiendo(false);
+  };
+
   const add = async (e) => {
     e.preventDefault();
     setErr("");
-    if (!name.trim() || !username.trim() || !password.trim()) return setErr("Completa todos los campos.");
+    const required = ["nombre", "apellido", "cedula", "telefono", "email", "direccion", "fechaNacimiento", "fechaIngreso", "comisionDefault", "username", "password"];
+    for (const f of required) {
+      if (!String(form[f]).trim()) return setErr("Completa todos los campos.");
+    }
+    setSaving(true);
     try {
-      await api.addUsuario({ name: name.trim(), username: username.trim(), password });
-      setName(""); setUsername(""); setPassword("");
+      await api.addUsuario({ ...form, comisionDefault: Number(form.comisionDefault), fotoDataUrl: foto });
+      setForm(emptyComercialForm());
+      setFoto(null);
       load();
     } catch (e) { setErr(e.message); }
+    setSaving(false);
   };
   const del = async (id) => { await api.deleteUsuario(id); load(); };
+
+  const field = (label, key, type = "text", width = 160) => (
+    <div>
+      <label style={miniLabel}>{label}</label>
+      <input type={type} value={form[key]} onChange={(e) => setField(key, e.target.value)} style={{ ...inputStyle, width }} />
+    </div>
+  );
 
   return (
     <div>
       <div style={{ background: "#fff", border: "1px solid #14110D1a", borderRadius: 4, padding: 18, marginBottom: 22 }}>
         <h3 style={{ fontFamily: "'Oswald', sans-serif", color: "#14110D", textTransform: "uppercase", fontSize: 15, marginTop: 0 }}>Nuevo comercial</h3>
-        <form onSubmit={add} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div><label style={miniLabel}>Nombre</label><input value={name} onChange={(e) => setName(e.target.value)} style={{ ...inputStyle, width: 180 }} /></div>
-          <div><label style={miniLabel}>Usuario</label><input value={username} onChange={(e) => setUsername(e.target.value)} style={{ ...inputStyle, width: 150 }} /></div>
-          <div><label style={miniLabel}>Contraseña</label><input value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, width: 150 }} /></div>
-          <button type="submit" style={{ ...primaryBtn, width: "auto", padding: "10px 18px", marginTop: 0, display: "flex", alignItems: "center", gap: 6 }}>
-            <UserPlus size={15} /> Crear acceso
+        <form onSubmit={add}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+            {field("Nombre", "nombre")}
+            {field("Apellido", "apellido")}
+            {field("Cédula", "cedula")}
+            {field("Teléfono", "telefono")}
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+            {field("Correo electrónico", "email", "email", 220)}
+            {field("Dirección", "direccion", "text", 220)}
+            {field("Fecha de nacimiento", "fechaNacimiento", "date", 160)}
+            {field("Fecha de ingreso", "fechaIngreso", "date", 160)}
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+            {field("% comisión por defecto", "comisionDefault", "number", 130)}
+            {field("Usuario", "username", "text", 150)}
+            {field("Contraseña", "password", "text", 150)}
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={miniLabel}>Fotografía</label>
+            {foto ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                <img src={foto} alt="Foto" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: "50%", border: "2px solid #F4A93B" }} />
+                <button type="button" onClick={() => setFoto(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "1px solid #c0392b55", color: "#c0392b", borderRadius: 3, padding: "6px 10px", cursor: "pointer", fontSize: 12.5 }}>
+                  <X size={13} /> Quitar foto
+                </button>
+              </div>
+            ) : (
+              <label style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 8, border: "1.5px dashed #14110D88", borderRadius: 3, padding: "9px 14px", color: "#14110D", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+                {comprimiendo ? <Loader2 size={15} className="tc-spin" /> : <Camera size={15} />}
+                {comprimiendo ? "Procesando..." : "Tomar foto con la cámara"}
+                <input type="file" accept="image/*" capture="user" onChange={onFotoChange} style={{ display: "none" }} />
+              </label>
+            )}
+          </div>
+
+          <button type="submit" disabled={saving} style={{ ...primaryBtn, width: "auto", padding: "10px 18px", marginTop: 0, display: "flex", alignItems: "center", gap: 6, opacity: saving ? 0.7 : 1 }}>
+            <UserPlus size={15} /> {saving ? "Creando..." : "Crear acceso"}
           </button>
         </form>
         {err && <div style={{ color: "#c0392b", fontSize: 12.5, marginTop: 8 }}>{err}</div>}
@@ -820,16 +911,28 @@ function Comerciales() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {users.map((u) => (
-          <div key={u.id} style={{ background: "#fff", border: "1px solid #14110D1a", borderRadius: 3, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{u.name}</div>
-              <div style={{ fontSize: 12, color: "#12242A88", fontFamily: "'JetBrains Mono', monospace" }}>@{u.username}</div>
+          <div key={u.id} style={{ background: "#fff", border: "1px solid #14110D1a", borderRadius: 3, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button
+              onClick={() => u.tieneFoto && setViewingFoto(u.id)}
+              style={{ width: 40, height: 40, borderRadius: "50%", background: "#F6EEDD", border: "1.5px solid #F4A93B", display: "flex", alignItems: "center", justifyContent: "center", cursor: u.tieneFoto ? "pointer" : "default", padding: 0, overflow: "hidden", flexShrink: 0 }}
+            >
+              {u.tieneFoto ? <ImageIcon size={16} color="#F4A93B" /> : <UserPlus size={16} color="#F4A93B88" />}
+            </button>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{u.name} <span style={{ fontWeight: 400, color: "#12242A88", fontSize: 12 }}>· @{u.username}</span></div>
+              <div style={{ fontSize: 11.5, color: "#12242A88", display: "flex", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+                {u.cedula && <span>CC {u.cedula}</span>}
+                {u.telefono && <span>{u.telefono}</span>}
+                {u.email && <span>{u.email}</span>}
+                {u.comisionDefault != null && <span style={{ color: "#E8642B", fontWeight: 600 }}>{u.comisionDefault}% comisión</span>}
+              </div>
             </div>
             <button onClick={() => del(u.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b88" }}><Trash2 size={15} /></button>
           </div>
         ))}
         {users.length === 0 && <EmptyState text="Aún no has creado accesos para comerciales." />}
       </div>
+      {viewingFoto && <FotoComercialModal userId={viewingFoto} onClose={() => setViewingFoto(null)} />}
     </div>
   );
 }
@@ -900,4 +1003,3 @@ export default function App() {
     </div>
   );
 }
-
