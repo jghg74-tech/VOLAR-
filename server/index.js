@@ -23,7 +23,8 @@ app.post("/api/auth/login", async (req, res) => {
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: "Usuario o contraseña incorrectos." });
   const token = sign(user);
-  res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
+  const comisionDefault = user.comision_default != null ? Number(user.comision_default) : null;
+  res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role, comisionDefault } });
 });
 
 app.get("/api/me", requireAuth, (req, res) => {
@@ -215,24 +216,79 @@ app.get("/api/comprobante/:ventaId", requireAuth, requireAdmin, async (req, res)
 /* ---------------- USUARIOS (COMERCIALES) ---------------- */
 
 app.get("/api/usuarios", requireAuth, requireAdmin, async (req, res) => {
-  const { rows } = await pool.query("SELECT id, username, name, role FROM users WHERE role='comercial' ORDER BY name");
-  res.json(rows);
+  const { rows } = await pool.query(`
+    SELECT u.id, u.username, u.name, u.nombre, u.apellido, u.cedula, u.telefono, u.email,
+           u.direccion, u.fecha_nacimiento, u.fecha_ingreso, u.comision_default,
+           (f.user_id IS NOT NULL) AS tiene_foto
+    FROM users u
+    LEFT JOIN fotos_comercial f ON f.user_id = u.id
+    WHERE u.role='comercial'
+    ORDER BY u.name
+  `);
+  res.json(
+    rows.map((u) => ({
+      id: u.id,
+      username: u.username,
+      name: u.name,
+      nombre: u.nombre,
+      apellido: u.apellido,
+      cedula: u.cedula,
+      telefono: u.telefono,
+      email: u.email,
+      direccion: u.direccion,
+      fechaNacimiento: u.fecha_nacimiento ? u.fecha_nacimiento.toISOString().slice(0, 10) : null,
+      fechaIngreso: u.fecha_ingreso ? u.fecha_ingreso.toISOString().slice(0, 10) : null,
+      comisionDefault: u.comision_default != null ? Number(u.comision_default) : null,
+      tieneFoto: u.tiene_foto,
+    }))
+  );
 });
 
 app.post("/api/usuarios", requireAuth, requireAdmin, async (req, res) => {
-  const { name, username, password } = req.body || {};
-  if (!name?.trim() || !username?.trim() || !password?.trim()) return res.status(400).json({ error: "Completa todos los campos." });
-  try {
-    const hash = await bcrypt.hash(password, 10);
-    const { rows } = await pool.query(
-      "INSERT INTO users (username, password_hash, name, role) VALUES ($1,$2,$3,'comercial') RETURNING id, username, name, role",
-      [username.trim(), hash, name.trim()]
-    );
-    res.status(201).json(rows[0]);
-  } catch (e) {
-    if (e.code === "23505") return res.status(409).json({ error: "Ese usuario ya existe." });
-    res.status(500).json({ error: "No se pudo crear el acceso." });
+  const {
+    nombre, apellido, cedula, telefono, email, direccion,
+    fechaNacimiento, fechaIngreso, comisionDefault,
+    username, password, fotoDataUrl,
+  } = req.body || {};
+
+  if (!nombre?.trim() || !apellido?.trim() || !cedula?.trim() || !telefono?.trim() || !email?.trim() ||
+      !direccion?.trim() || !fechaNacimiento || !fechaIngreso || comisionDefault === undefined || comisionDefault === "" ||
+      !username?.trim() || !password?.trim()) {
+    return res.status(400).json({ error: "Completa todos los campos." });
   }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const hash = await bcrypt.hash(password, 10);
+    const fullName = `${nombre.trim()} ${apellido.trim()}`.trim();
+    const { rows } = await client.query(
+      `INSERT INTO users
+        (username, password_hash, name, nombre, apellido, cedula, telefono, email, direccion, fecha_nacimiento, fecha_ingreso, comision_default, role)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'comercial')
+       RETURNING id, username, name`,
+      [username.trim(), hash, fullName, nombre.trim(), apellido.trim(), cedula.trim(), telefono.trim(), email.trim(),
+       direccion.trim(), fechaNacimiento, fechaIngreso, Number(comisionDefault)]
+    );
+    const newUser = rows[0];
+    if (fotoDataUrl) {
+      await client.query("INSERT INTO fotos_comercial (user_id, data_url) VALUES ($1,$2)", [newUser.id, fotoDataUrl]);
+    }
+    await client.query("COMMIT");
+    res.status(201).json(newUser);
+  } catch (e) {
+    await client.query("ROLLBACK");
+    if (e.code === "23505") return res.status(409).json({ error: "Ese usuario o cédula ya existe." });
+    res.status(500).json({ error: "No se pudo crear el acceso." });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/usuarios/:id/foto", requireAuth, requireAdmin, async (req, res) => {
+  const { rows } = await pool.query("SELECT data_url FROM fotos_comercial WHERE user_id=$1", [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: "No hay foto para este comercial." });
+  res.json({ dataUrl: rows[0].data_url });
 });
 
 app.delete("/api/usuarios/:id", requireAuth, requireAdmin, async (req, res) => {
