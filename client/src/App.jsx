@@ -126,19 +126,91 @@ function Login({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 18% 18%, #F9C860 0%, #F4A93B 16%, #E8642B 38%, #7A3A22 58%, #241510 78%, #14110D 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', sans-serif", padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 380, background: "#F6EEDD", borderRadius: 4, border: "1px solid #14110D22", boxShadow: "0 30px 60px -20px rgba(20,17,13,0.7)", overflow: "hidden" }}>
-        <div style={{ background: "#14110D", padding: "22px 28px 18px", borderBottom: "3px solid #E8642B" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Ship size={20} color="#F4A93B" />
-            <Plane size={17} color="#E8642B" style={{ transform: "rotate(-6deg)" }} />
+    <div
+      style={{
+        minHeight: "100vh",
+        minHeight: "100dvh",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "flex-end",
+        fontFamily: "'Inter', sans-serif",
+        background: "#14110D",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* Foto de fondo: el barco Volar */}
+      <img
+        src="/barco-volar.jpg"
+        alt="Barco Volar"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "center 30%",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(180deg, rgba(20,17,13,0.15) 0%, rgba(20,17,13,0.35) 45%, rgba(20,17,13,0.88) 72%, #14110D 92%)",
+        }}
+      />
+
+      {/* Logo arriba, sobre la foto */}
+      <div style={{ position: "relative", padding: "max(24px, env(safe-area-inset-top)) 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Ship size={18} color="#F4A93B" style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }} />
           </div>
-          <h1 style={{ fontFamily: "'Caveat', cursive", color: "#F6EEDD", fontSize: 44, lineHeight: 1, margin: "8px 0 0" }}>Volar</h1>
-          <p style={{ color: "#F4A93B", fontSize: 11.5, margin: "4px 0 0", fontFamily: "'JetBrains Mono', monospace", textTransform: "uppercase", letterSpacing: 1.5 }}>
-            Manifiesto de ventas · Barco &amp; Helicóptero
-          </p>
+          <h1 style={{ fontFamily: "'Caveat', cursive", color: "#fff", fontSize: 48, lineHeight: 1, margin: "4px 0 0", textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
+            Volar
+          </h1>
         </div>
-        <form onSubmit={submit} style={{ padding: "26px 28px 30px" }}>
+
+        {/* Insignia circular: helicóptero sobrevolando la bahía */}
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: "50%",
+            overflow: "hidden",
+            border: "2.5px solid #F4A93B",
+            boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
+            flexShrink: 0,
+          }}
+        >
+          <img
+            src="/helicoptero-volar.webp"
+            alt="Sobrevuelo en helicóptero"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </div>
+      </div>
+
+      {/* Tarjeta de acceso, tipo hoja flotante abajo */}
+      <div
+        style={{
+          position: "relative",
+          background: "#F6EEDD",
+          borderRadius: "18px 18px 0 0",
+          boxShadow: "0 -10px 40px rgba(0,0,0,0.35)",
+          padding: "26px 26px max(26px, env(safe-area-inset-bottom))",
+        }}
+      >
+        <div style={{ width: 40, height: 4, borderRadius: 999, background: "#14110D22", margin: "0 auto 18px" }} />
+        <p style={{ margin: "0 0 4px", fontFamily: "'Oswald', sans-serif", fontSize: 19, color: "#14110D", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          ¡Hola! 👋
+        </p>
+        <p style={{ margin: "0 0 20px", fontSize: 13.5, color: "#12242A88" }}>
+          Ingresa para registrar tus ventas del día
+        </p>
+
+        <form onSubmit={submit}>
           <label style={miniLabel}>Usuario</label>
           <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="tu.usuario" style={inputStyle} />
           <label style={{ ...miniLabel, marginTop: 14 }}>Contraseña</label>
