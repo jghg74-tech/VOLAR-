@@ -855,28 +855,58 @@ function Cupos() {
 /* ---------------------------------------------------------------
    ADMIN: tipos de tour
 ------------------------------------------------------------------*/
-function TiposTour() {
-  const [tiposTour, setTiposTour] = useState({ barco: [], helicoptero: [] });
+function emptyProductoForm() {
+  return { nombre: "", precioBase: "", terminosCondiciones: "" };
+}
+
+function Producto() {
+  const [productos, setProductos] = useState([]);
   const [tour, setTour] = useState("barco");
-  const [nombre, setNombre] = useState("");
+  const [form, setForm] = useState(emptyProductoForm());
   const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editErr, setEditErr] = useState("");
   const meta = TOUR_META[tour];
 
-  const load = useCallback(async () => { try { setTiposTour(await api.tiposTour()); } catch (e) {} }, []);
+  const load = useCallback(async () => { try { setProductos(await api.productos()); } catch (e) {} }, []);
   useEffect(() => { load(); }, [load]);
 
   const add = async (e) => {
     e.preventDefault();
     setErr("");
-    if (!nombre.trim()) return;
-    try { await api.addTipoTour(tour, nombre.trim()); setNombre(""); load(); }
-    catch (e) { setErr(e.message); }
+    if (!form.nombre.trim()) return setErr("El nombre es obligatorio.");
+    setSaving(true);
+    try {
+      await api.addProducto({ tour, ...form });
+      setForm(emptyProductoForm());
+      load();
+    } catch (e) { setErr(e.message); }
+    setSaving(false);
   };
-  const rename = async (oldVal, newVal) => {
-    if (!newVal.trim() || newVal === oldVal) return;
-    await api.renameTipoTour(tour, oldVal, newVal.trim()); load();
+
+  const startEdit = (p) => {
+    setEditingId(p.id);
+    setEditForm({ nombre: p.nombre, precioBase: p.precioBase != null ? String(p.precioBase) : "", terminosCondiciones: p.terminosCondiciones || "" });
+    setEditErr("");
   };
-  const del = async (val) => { await api.deleteTipoTour(tour, val); load(); };
+  const cancelEdit = () => { setEditingId(null); setEditForm(null); };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    setEditErr("");
+    if (!editForm.nombre.trim()) return setEditErr("El nombre es obligatorio.");
+    try {
+      await api.updateProducto(editingId, editForm);
+      cancelEdit();
+      load();
+    } catch (e) { setEditErr(e.message); }
+  };
+
+  const del = async (id) => { await api.deleteProducto(id); load(); };
+
+  const productosDelTour = productos.filter((p) => p.tour === tour);
 
   return (
     <div>
@@ -889,29 +919,83 @@ function TiposTour() {
       </div>
 
       <div style={{ background: "#fff", border: "1px solid #14110D1a", borderRadius: 4, padding: 18, marginBottom: 22 }}>
-        <h3 style={{ fontFamily: "'Oswald', sans-serif", color: "#14110D", textTransform: "uppercase", fontSize: 15, marginTop: 0 }}>Nuevo tipo de tour — {meta.label}</h3>
-        <form onSubmit={add} style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label style={miniLabel}>Nombre</label>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Tour Privado VIP" style={inputStyle} />
+        <h3 style={{ fontFamily: "'Oswald', sans-serif", color: "#14110D", textTransform: "uppercase", fontSize: 15, marginTop: 0 }}>Nuevo producto — {meta.label}</h3>
+        <form onSubmit={add}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={miniLabel}>Nombre del tour</label>
+              <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Tour Privado VIP" style={inputStyle} />
+            </div>
+            <div style={{ width: 160 }}>
+              <label style={miniLabel}>Precio base (COP)</label>
+              <input type="number" min="0" value={form.precioBase} onChange={(e) => setForm({ ...form, precioBase: e.target.value })} placeholder="0" style={inputStyle} />
+            </div>
           </div>
-          <button type="submit" style={{ ...primaryBtn, background: meta.color, width: "auto", padding: "10px 18px", marginTop: 0, display: "flex", alignItems: "center", gap: 6 }}>
-            <Plus size={15} /> Agregar
+          <div style={{ marginBottom: 12 }}>
+            <label style={miniLabel}>Términos y condiciones de este tour</label>
+            <textarea
+              value={form.terminosCondiciones}
+              onChange={(e) => setForm({ ...form, terminosCondiciones: e.target.value })}
+              rows={3}
+              placeholder="Ej: No incluye impuestos portuarios. Cancelaciones con 24h de anticipación. Peso máximo por pasajero 110kg..."
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+          </div>
+          <button type="submit" disabled={saving} style={{ ...primaryBtn, background: meta.color, width: "auto", padding: "10px 18px", marginTop: 0, display: "flex", alignItems: "center", gap: 6, opacity: saving ? 0.7 : 1 }}>
+            <Plus size={15} /> {saving ? "Guardando..." : "Agregar producto"}
           </button>
         </form>
         {err && <div style={{ color: "#c0392b", fontSize: 12.5, marginTop: 8 }}>{err}</div>}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {(tiposTour[tour] || []).map((t) => (
-          <div key={t} style={{ background: "#fff", border: `1px solid ${meta.color}55`, borderRadius: 3, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-            <input defaultValue={t} onBlur={(e) => rename(t, e.target.value)} style={{ ...inputStyle, marginTop: 0, border: "1px solid transparent", flex: 1 }} />
-            <button onClick={() => del(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b88" }}><Trash2 size={15} /></button>
-          </div>
-        ))}
-        {(tiposTour[tour] || []).length === 0 && <EmptyState text={`Aún no hay tipos de tour para ${meta.label}. Agrega el primero arriba.`} />}
+        {productosDelTour.map((p) => {
+          const isEditing = editingId === p.id;
+          return (
+            <div key={p.id} style={{ background: "#fff", border: `1px solid ${meta.color}55`, borderRadius: 3, padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{p.nombre}</div>
+                  {p.precioBase != null && <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, color: meta.color, marginTop: 2 }}>{fmtCOP(p.precioBase)} base</div>}
+                </div>
+                <button onClick={() => (isEditing ? cancelEdit() : startEdit(p))} style={{ background: "none", border: "1px solid #14110D55", color: "#14110D", borderRadius: 3, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}>
+                  {isEditing ? "Cancelar" : "Editar"}
+                </button>
+                <button onClick={() => del(p.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b88" }}><Trash2 size={15} /></button>
+              </div>
+
+              {!isEditing && p.terminosCondiciones && (
+                <p style={{ fontSize: 12, color: "#12242A88", marginTop: 8, marginBottom: 0, whiteSpace: "pre-wrap" }}>{p.terminosCondiciones}</p>
+              )}
+
+              {isEditing && editForm && (
+                <form onSubmit={saveEdit} style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #14110D22" }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={miniLabel}>Nombre del tour</label>
+                      <input value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} style={inputStyle} />
+                    </div>
+                    <div style={{ width: 160 }}>
+                      <label style={miniLabel}>Precio base (COP)</label>
+                      <input type="number" min="0" value={editForm.precioBase} onChange={(e) => setEditForm({ ...editForm, precioBase: e.target.value })} style={inputStyle} />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={miniLabel}>Términos y condiciones</label>
+                    <textarea value={editForm.terminosCondiciones} onChange={(e) => setEditForm({ ...editForm, terminosCondiciones: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+                  </div>
+                  {editErr && <div style={{ color: "#c0392b", fontSize: 12.5, marginBottom: 10 }}>{editErr}</div>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="submit" style={{ ...primaryBtn, background: meta.color, width: "auto", padding: "9px 16px", marginTop: 0 }}>Guardar cambios</button>
+                    <button type="button" onClick={cancelEdit} style={{ background: "none", border: "1px solid #14110D55", color: "#14110D", borderRadius: 3, padding: "9px 16px", cursor: "pointer" }}>Cancelar</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          );
+        })}
+        {productosDelTour.length === 0 && <EmptyState text={`Aún no hay productos para ${meta.label}. Agrega el primero arriba.`} />}
       </div>
-      <p style={{ fontSize: 12, color: "#12242A77", marginTop: 12 }}>Edita el nombre y presiona fuera del campo para guardar el cambio.</p>
     </div>
   );
 }
@@ -951,7 +1035,16 @@ function emptyComercialForm() {
   return { nombre: "", apellido: "", cedula: "", telefono: "", email: "", direccion: "", fechaNacimiento: "", fechaIngreso: todayStr(), comisionDefault: "10", username: "", password: "" };
 }
 
-function Comerciales() {
+function emptyEditForm(u) {
+  return {
+    nombre: u.nombre || "", apellido: u.apellido || "", cedula: u.cedula || "", telefono: u.telefono || "",
+    email: u.email || "", direccion: u.direccion || "", fechaNacimiento: u.fechaNacimiento || "",
+    fechaIngreso: u.fechaIngreso || "", comisionDefault: u.comisionDefault != null ? String(u.comisionDefault) : "",
+    username: u.username, password: "", role: u.role,
+  };
+}
+
+function Usuarios({ currentUserId }) {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(emptyComercialForm());
   const [foto, setFoto] = useState(null);
@@ -959,6 +1052,11 @@ function Comerciales() {
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [viewingFoto, setViewingFoto] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editFoto, setEditFoto] = useState(null);
+  const [editErr, setEditErr] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const load = useCallback(async () => { try { setUsers(await api.usuarios()); } catch (e) {} }, []);
   useEffect(() => { load(); }, [load]);
@@ -992,6 +1090,40 @@ function Comerciales() {
     setSaving(false);
   };
   const del = async (id) => { await api.deleteUsuario(id); load(); };
+
+  const startEdit = (u) => {
+    setEditingId(u.id);
+    setEditForm(emptyEditForm(u));
+    setEditFoto(null);
+    setEditErr("");
+  };
+  const cancelEdit = () => { setEditingId(null); setEditForm(null); setEditFoto(null); };
+
+  const onEditFotoChange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try { setEditFoto(await compressImage(file)); }
+    catch (err) { setEditErr("No se pudo procesar la foto."); }
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    setEditErr("");
+    if (!editForm.nombre.trim() || !editForm.apellido.trim() || !editForm.username.trim()) {
+      return setEditErr("Nombre, apellido y usuario son obligatorios.");
+    }
+    setEditSaving(true);
+    try {
+      await api.updateUsuario(editingId, {
+        ...editForm,
+        comisionDefault: editForm.comisionDefault !== "" ? Number(editForm.comisionDefault) : null,
+        fotoDataUrl: editFoto,
+      });
+      cancelEdit();
+      load();
+    } catch (e) { setEditErr(e.message); }
+    setEditSaving(false);
+  };
 
   const field = (label, key, type = "text", width = 160) => (
     <div>
@@ -1048,28 +1180,95 @@ function Comerciales() {
         {err && <div style={{ color: "#c0392b", fontSize: 12.5, marginTop: 8 }}>{err}</div>}
       </div>
 
+      <h3 style={{ fontFamily: "'Oswald', sans-serif", color: "#14110D", textTransform: "uppercase", fontSize: 15, marginBottom: 10 }}>Todos los usuarios</h3>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {users.map((u) => (
-          <div key={u.id} style={{ background: "#fff", border: "1px solid #14110D1a", borderRadius: 3, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <button
-              onClick={() => u.tieneFoto && setViewingFoto(u.id)}
-              style={{ width: 40, height: 40, borderRadius: "50%", background: "#F6EEDD", border: "1.5px solid #F4A93B", display: "flex", alignItems: "center", justifyContent: "center", cursor: u.tieneFoto ? "pointer" : "default", padding: 0, overflow: "hidden", flexShrink: 0 }}
-            >
-              {u.tieneFoto ? <ImageIcon size={16} color="#F4A93B" /> : <UserPlus size={16} color="#F4A93B88" />}
-            </button>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{u.name} <span style={{ fontWeight: 400, color: "#12242A88", fontSize: 12 }}>· @{u.username}</span></div>
-              <div style={{ fontSize: 11.5, color: "#12242A88", display: "flex", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
-                {u.cedula && <span>CC {u.cedula}</span>}
-                {u.telefono && <span>{u.telefono}</span>}
-                {u.email && <span>{u.email}</span>}
-                {u.comisionDefault != null && <span style={{ color: "#E8642B", fontWeight: 600 }}>{u.comisionDefault}% comisión</span>}
+        {users.map((u) => {
+          const isEditing = editingId === u.id;
+          const isAdmin = u.role === "admin";
+          return (
+            <div key={u.id} style={{ background: "#fff", border: `1px solid ${isAdmin ? "#E8642B55" : "#14110D1a"}`, borderRadius: 3, padding: "10px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => u.tieneFoto && setViewingFoto(u.id)}
+                  style={{ width: 40, height: 40, borderRadius: "50%", background: "#F6EEDD", border: "1.5px solid #F4A93B", display: "flex", alignItems: "center", justifyContent: "center", cursor: u.tieneFoto ? "pointer" : "default", padding: 0, overflow: "hidden", flexShrink: 0 }}
+                >
+                  {u.tieneFoto ? <ImageIcon size={16} color="#F4A93B" /> : <UserPlus size={16} color="#F4A93B88" />}
+                </button>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 8 }}>
+                    {u.name} <span style={{ fontWeight: 400, color: "#12242A88", fontSize: 12 }}>· @{u.username}</span>
+                    <Stamp color={isAdmin ? "#E8642B" : "#14110D"}>{isAdmin ? "Admin" : "Comercial"}</Stamp>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#12242A88", display: "flex", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+                    {u.cedula && <span>CC {u.cedula}</span>}
+                    {u.telefono && <span>{u.telefono}</span>}
+                    {u.email && <span>{u.email}</span>}
+                    {u.comisionDefault != null && <span style={{ color: "#E8642B", fontWeight: 600 }}>{u.comisionDefault}% comisión</span>}
+                  </div>
+                </div>
+                <button onClick={() => (isEditing ? cancelEdit() : startEdit(u))} style={{ background: "none", border: `1px solid #14110D55`, color: "#14110D", borderRadius: 3, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}>
+                  {isEditing ? "Cancelar" : "Editar"}
+                </button>
+                {u.id !== currentUserId && (
+                  <button onClick={() => del(u.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b88" }}><Trash2 size={15} /></button>
+                )}
               </div>
+
+              {isEditing && editForm && (
+                <form onSubmit={saveEdit} style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed #14110D22" }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                    <div><label style={miniLabel}>Nombre</label><input value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} style={{ ...inputStyle, width: 150 }} /></div>
+                    <div><label style={miniLabel}>Apellido</label><input value={editForm.apellido} onChange={(e) => setEditForm({ ...editForm, apellido: e.target.value })} style={{ ...inputStyle, width: 150 }} /></div>
+                    <div><label style={miniLabel}>Cédula</label><input value={editForm.cedula} onChange={(e) => setEditForm({ ...editForm, cedula: e.target.value })} style={{ ...inputStyle, width: 130 }} /></div>
+                    <div><label style={miniLabel}>Teléfono</label><input value={editForm.telefono} onChange={(e) => setEditForm({ ...editForm, telefono: e.target.value })} style={{ ...inputStyle, width: 130 }} /></div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                    <div><label style={miniLabel}>Correo</label><input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} style={{ ...inputStyle, width: 200 }} /></div>
+                    <div><label style={miniLabel}>Dirección</label><input value={editForm.direccion} onChange={(e) => setEditForm({ ...editForm, direccion: e.target.value })} style={{ ...inputStyle, width: 200 }} /></div>
+                    <div><label style={miniLabel}>F. nacimiento</label><input type="date" value={editForm.fechaNacimiento} onChange={(e) => setEditForm({ ...editForm, fechaNacimiento: e.target.value })} style={{ ...inputStyle, width: 150 }} /></div>
+                    <div><label style={miniLabel}>F. ingreso</label><input type="date" value={editForm.fechaIngreso} onChange={(e) => setEditForm({ ...editForm, fechaIngreso: e.target.value })} style={{ ...inputStyle, width: 150 }} /></div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                    <div><label style={miniLabel}>% comisión</label><input type="number" value={editForm.comisionDefault} onChange={(e) => setEditForm({ ...editForm, comisionDefault: e.target.value })} style={{ ...inputStyle, width: 110 }} /></div>
+                    <div><label style={miniLabel}>Usuario</label><input value={editForm.username} onChange={(e) => setEditForm({ ...editForm, username: e.target.value })} style={{ ...inputStyle, width: 140 }} /></div>
+                    <div><label style={miniLabel}>Nueva contraseña</label><input value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} placeholder="dejar en blanco = sin cambio" style={{ ...inputStyle, width: 200 }} /></div>
+                    <div>
+                      <label style={miniLabel}>Rol</label>
+                      <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })} style={{ ...inputStyle, width: 150 }}>
+                        <option value="comercial">Comercial</option>
+                        <option value="admin">Administrador (acceso total)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={miniLabel}>Reemplazar foto (opcional)</label>
+                    {editFoto ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                        <img src={editFoto} alt="Nueva foto" style={{ width: 50, height: 50, objectFit: "cover", borderRadius: "50%", border: "2px solid #F4A93B" }} />
+                        <button type="button" onClick={() => setEditFoto(null)} style={{ background: "none", border: "1px solid #c0392b55", color: "#c0392b", borderRadius: 3, padding: "5px 9px", cursor: "pointer", fontSize: 11.5 }}>Quitar</button>
+                      </div>
+                    ) : (
+                      <label style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 6, border: "1.5px dashed #14110D88", borderRadius: 3, padding: "7px 12px", color: "#14110D", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                        <Camera size={13} /> Tomar nueva foto
+                        <input type="file" accept="image/*" capture="user" onChange={onEditFotoChange} style={{ display: "none" }} />
+                      </label>
+                    )}
+                  </div>
+                  {editErr && <div style={{ color: "#c0392b", fontSize: 12.5, marginBottom: 10 }}>{editErr}</div>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="submit" disabled={editSaving} style={{ ...primaryBtn, width: "auto", padding: "9px 16px", marginTop: 0, opacity: editSaving ? 0.7 : 1 }}>
+                      {editSaving ? "Guardando..." : "Guardar cambios"}
+                    </button>
+                    <button type="button" onClick={cancelEdit} style={{ background: "none", border: "1px solid #14110D55", color: "#14110D", borderRadius: 3, padding: "9px 16px", cursor: "pointer" }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
-            <button onClick={() => del(u.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b88" }}><Trash2 size={15} /></button>
-          </div>
-        ))}
-        {users.length === 0 && <EmptyState text="Aún no has creado accesos para comerciales." />}
+          );
+        })}
+        {users.length === 0 && <EmptyState text="Aún no hay usuarios." />}
       </div>
       {viewingFoto && <FotoComercialModal userId={viewingFoto} onClose={() => setViewingFoto(null)} />}
     </div>
@@ -1121,8 +1320,8 @@ export default function App() {
   const adminTabs = [
     { key: "resumen", label: "Ventas en tiempo real" },
     { key: "cupos", label: "Programar cupos" },
-    { key: "tipos", label: "Tipos de tour" },
-    { key: "comerciales", label: "Comerciales" },
+    { key: "producto", label: "Producto" },
+    { key: "comerciales", label: "Usuarios" },
   ];
   const comercialTabs = [
     { key: "registrar", label: "Registrar venta" },
@@ -1137,8 +1336,8 @@ export default function App() {
           <>
             {tab === "resumen" && <Resumen />}
             {tab === "cupos" && <Cupos />}
-            {tab === "tipos" && <TiposTour />}
-            {tab === "comerciales" && <Comerciales />}
+            {tab === "producto" && <Producto />}
+            {tab === "comerciales" && <Usuarios currentUserId={user.id} />}
           </>
         ) : (
           <>
