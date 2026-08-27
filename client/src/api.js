@@ -35,10 +35,10 @@ export const api = {
     apiFetch("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   me: () => apiFetch("/api/me"),
   tiposTour: () => apiFetch("/api/tipos-tour"),
-  addTipoTour: (tour, nombre) => apiFetch("/api/tipos-tour", { method: "POST", body: JSON.stringify({ tour, nombre }) }),
-  renameTipoTour: (tour, nombreAnterior, nombreNuevo) =>
-    apiFetch("/api/tipos-tour", { method: "PUT", body: JSON.stringify({ tour, nombreAnterior, nombreNuevo }) }),
-  deleteTipoTour: (tour, nombre) => apiFetch("/api/tipos-tour", { method: "DELETE", body: JSON.stringify({ tour, nombre }) }),
+  productos: () => apiFetch("/api/productos"),
+  addProducto: (p) => apiFetch("/api/productos", { method: "POST", body: JSON.stringify(p) }),
+  updateProducto: (id, p) => apiFetch(`/api/productos/${id}`, { method: "PUT", body: JSON.stringify(p) }),
+  deleteProducto: (id) => apiFetch(`/api/productos/${id}`, { method: "DELETE" }),
   cupos: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return apiFetch("/api/cupos" + (qs ? `?${qs}` : ""));
@@ -53,6 +53,7 @@ export const api = {
   comprobante: (ventaId) => apiFetch(`/api/comprobante/${ventaId}`),
   usuarios: () => apiFetch("/api/usuarios"),
   addUsuario: (u) => apiFetch("/api/usuarios", { method: "POST", body: JSON.stringify(u) }),
+  updateUsuario: (id, u) => apiFetch(`/api/usuarios/${id}`, { method: "PUT", body: JSON.stringify(u) }),
   deleteUsuario: (id) => apiFetch(`/api/usuarios/${id}`, { method: "DELETE" }),
   fotoUsuario: (id) => apiFetch(`/api/usuarios/${id}/foto`),
 };
