@@ -31,7 +31,7 @@ app.get("/api/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
-/* ---------------- TIPOS DE TOUR ---------------- */
+/* ---------------- TIPOS DE TOUR (nombres, usado por el formulario de venta) ---------------- */
 
 app.get("/api/tipos-tour", requireAuth, async (req, res) => {
   const { rows } = await pool.query("SELECT tour, nombre FROM tipos_tour ORDER BY tour, id");
@@ -40,31 +40,58 @@ app.get("/api/tipos-tour", requireAuth, async (req, res) => {
   res.json(out);
 });
 
-app.post("/api/tipos-tour", requireAuth, requireAdmin, async (req, res) => {
-  const { tour, nombre } = req.body || {};
+/* ---------------- PRODUCTO (tour + precio base + términos y condiciones) ---------------- */
+
+app.get("/api/productos", requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT id, tour, nombre, precio_base, terminos_condiciones FROM tipos_tour ORDER BY tour, id"
+  );
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      tour: r.tour,
+      nombre: r.nombre,
+      precioBase: r.precio_base != null ? Number(r.precio_base) : null,
+      terminosCondiciones: r.terminos_condiciones || "",
+    }))
+  );
+});
+
+app.post("/api/productos", requireAuth, requireAdmin, async (req, res) => {
+  const { tour, nombre, precioBase, terminosCondiciones } = req.body || {};
   if (!["barco", "helicoptero"].includes(tour) || !nombre?.trim()) {
     return res.status(400).json({ error: "Datos inválidos." });
   }
   try {
-    await pool.query("INSERT INTO tipos_tour (tour, nombre) VALUES ($1,$2)", [tour, nombre.trim()]);
-    res.status(201).json({ ok: true });
+    const { rows } = await pool.query(
+      "INSERT INTO tipos_tour (tour, nombre, precio_base, terminos_condiciones) VALUES ($1,$2,$3,$4) RETURNING id",
+      [tour, nombre.trim(), precioBase !== undefined && precioBase !== "" ? Number(precioBase) : null, terminosCondiciones?.trim() || null]
+    );
+    res.status(201).json({ id: rows[0].id });
   } catch (e) {
-    if (e.code === "23505") return res.status(409).json({ error: "Ese tipo de tour ya existe." });
+    if (e.code === "23505") return res.status(409).json({ error: "Ya existe un producto con ese nombre para ese tour." });
     res.status(500).json({ error: "No se pudo guardar." });
   }
 });
 
-app.put("/api/tipos-tour", requireAuth, requireAdmin, async (req, res) => {
-  const { tour, nombreAnterior, nombreNuevo } = req.body || {};
-  if (!tour || !nombreAnterior || !nombreNuevo?.trim()) return res.status(400).json({ error: "Datos inválidos." });
-  await pool.query("UPDATE tipos_tour SET nombre=$1 WHERE tour=$2 AND nombre=$3", [nombreNuevo.trim(), tour, nombreAnterior]);
-  res.json({ ok: true });
+app.put("/api/productos/:id", requireAuth, requireAdmin, async (req, res) => {
+  const { nombre, precioBase, terminosCondiciones } = req.body || {};
+  if (!nombre?.trim()) return res.status(400).json({ error: "El nombre es obligatorio." });
+  try {
+    const { rows } = await pool.query(
+      "UPDATE tipos_tour SET nombre=$1, precio_base=$2, terminos_condiciones=$3 WHERE id=$4 RETURNING id",
+      [nombre.trim(), precioBase !== undefined && precioBase !== "" ? Number(precioBase) : null, terminosCondiciones?.trim() || null, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Producto no encontrado." });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === "23505") return res.status(409).json({ error: "Ya existe un producto con ese nombre para ese tour." });
+    res.status(500).json({ error: "No se pudo actualizar." });
+  }
 });
 
-app.delete("/api/tipos-tour", requireAuth, requireAdmin, async (req, res) => {
-  const { tour, nombre } = req.body || {};
-  if (!tour || !nombre) return res.status(400).json({ error: "Datos inválidos." });
-  await pool.query("DELETE FROM tipos_tour WHERE tour=$1 AND nombre=$2", [tour, nombre]);
+app.delete("/api/productos/:id", requireAuth, requireAdmin, async (req, res) => {
+  await pool.query("DELETE FROM tipos_tour WHERE id=$1", [req.params.id]);
   res.json({ ok: true });
 });
 
@@ -254,12 +281,11 @@ app.get("/api/comprobante/:ventaId", requireAuth, requireAdmin, async (req, res)
 app.get("/api/usuarios", requireAuth, requireAdmin, async (req, res) => {
   const { rows } = await pool.query(`
     SELECT u.id, u.username, u.name, u.nombre, u.apellido, u.cedula, u.telefono, u.email,
-           u.direccion, u.fecha_nacimiento, u.fecha_ingreso, u.comision_default,
+           u.direccion, u.fecha_nacimiento, u.fecha_ingreso, u.comision_default, u.role,
            (f.user_id IS NOT NULL) AS tiene_foto
     FROM users u
     LEFT JOIN fotos_comercial f ON f.user_id = u.id
-    WHERE u.role='comercial'
-    ORDER BY u.name
+    ORDER BY u.role, u.name
   `);
   res.json(
     rows.map((u) => ({
@@ -275,6 +301,7 @@ app.get("/api/usuarios", requireAuth, requireAdmin, async (req, res) => {
       fechaNacimiento: u.fecha_nacimiento ? u.fecha_nacimiento.toISOString().slice(0, 10) : null,
       fechaIngreso: u.fecha_ingreso ? u.fecha_ingreso.toISOString().slice(0, 10) : null,
       comisionDefault: u.comision_default != null ? Number(u.comision_default) : null,
+      role: u.role,
       tieneFoto: u.tiene_foto,
     }))
   );
@@ -330,8 +357,76 @@ app.get("/api/usuarios/:id/foto", requireAuth, requireAdmin, async (req, res) =>
   res.json({ dataUrl: rows[0].data_url });
 });
 
+app.put("/api/usuarios/:id", requireAuth, requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const {
+    nombre, apellido, cedula, telefono, email, direccion,
+    fechaNacimiento, fechaIngreso, comisionDefault,
+    username, password, role, fotoDataUrl,
+  } = req.body || {};
+
+  if (!nombre?.trim() || !apellido?.trim() || !username?.trim() || !role) {
+    return res.status(400).json({ error: "Faltan datos obligatorios (nombre, apellido, usuario, rol)." });
+  }
+  if (!["admin", "comercial"].includes(role)) {
+    return res.status(400).json({ error: "Rol inválido." });
+  }
+  if (id === req.user.id && role !== "admin") {
+    return res.status(400).json({ error: "No puedes quitarte a ti mismo el rol de administrador." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const fullName = `${nombre.trim()} ${apellido.trim()}`.trim();
+    const fields = [
+      "name=$1", "nombre=$2", "apellido=$3", "cedula=$4", "telefono=$5", "email=$6",
+      "direccion=$7", "fecha_nacimiento=$8", "fecha_ingreso=$9", "comision_default=$10",
+      "username=$11", "role=$12",
+    ];
+    const values = [
+      fullName, nombre.trim(), apellido.trim(), cedula?.trim() || null, telefono?.trim() || null,
+      email?.trim() || null, direccion?.trim() || null, fechaNacimiento || null, fechaIngreso || null,
+      comisionDefault !== undefined && comisionDefault !== "" ? Number(comisionDefault) : null,
+      username.trim(), role,
+    ];
+    let idx = values.length + 1;
+    if (password?.trim()) {
+      fields.push(`password_hash=$${idx}`);
+      values.push(await bcrypt.hash(password, 10));
+      idx++;
+    }
+    values.push(id);
+
+    const { rows } = await client.query(
+      `UPDATE users SET ${fields.join(", ")} WHERE id=$${idx} RETURNING id, username, name, role`,
+      values
+    );
+    if (!rows[0]) throw { status: 404, message: "Usuario no encontrado." };
+
+    if (fotoDataUrl) {
+      await client.query(
+        `INSERT INTO fotos_comercial (user_id, data_url) VALUES ($1,$2)
+         ON CONFLICT (user_id) DO UPDATE SET data_url = EXCLUDED.data_url, uploaded_at = now()`,
+        [id, fotoDataUrl]
+      );
+    }
+    await client.query("COMMIT");
+    res.json(rows[0]);
+  } catch (e) {
+    await client.query("ROLLBACK");
+    if (e.code === "23505") return res.status(409).json({ error: "Ese usuario o cédula ya existe." });
+    res.status(e.status || 500).json({ error: e.message || "No se pudo actualizar." });
+  } finally {
+    client.release();
+  }
+});
+
 app.delete("/api/usuarios/:id", requireAuth, requireAdmin, async (req, res) => {
-  await pool.query("DELETE FROM users WHERE id=$1 AND role='comercial'", [req.params.id]);
+  if (Number(req.params.id) === req.user.id) {
+    return res.status(400).json({ error: "No puedes eliminar tu propia cuenta." });
+  }
+  await pool.query("DELETE FROM users WHERE id=$1", [req.params.id]);
   res.json({ ok: true });
 });
 
